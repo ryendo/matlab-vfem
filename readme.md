@@ -15,7 +15,7 @@ Edit **my_intlab_mode_config.m** to configure the computing environment.
 
 ```MATLAB
 %The path of INTLAB toolbox and initialization.
-addpath('Intlab_V9')
+addpath('Intlab_V12')
 
 %The path of the library of verified eigenvalue estimation for matrix.
 addpath('verified_eig_estimation')
