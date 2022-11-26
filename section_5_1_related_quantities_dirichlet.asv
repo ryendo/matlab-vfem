@@ -1,0 +1,90 @@
+%% implementation of Algorithm 2 in section 5.2.
+format compact short infsup
+
+N_veig = 64; % default value: 64
+N_eigs = 96; % default value: 96
+
+
+derivative_calc(I_pi/3,N_veig,N_eigs)
+
+function [F_inf,F_sup,Err]=derivative_calc(I,N_veig,N_eigs)
+    
+    Ch=I_intval('0.1893')/N_veig;
+
+    I0=I_intval(I_inf(I));
+    I1=I_intval(I_sup(I));
+    
+    c01=infsup((sin(I0)/sin(I1))^2,(cos(I0)/cos(I1))^2);
+    c10=infsup((cos(I1)/cos(I0))^2,(sin(I1)/sin(I0))^2);
+
+%%  create meshes and matrices
+%   create mesh for rigorous calculation
+    tri_I_intval = [I_intval('0'),I_intval('0');I_intval('1'),I_intval('0');cos(I0),sin(I0)]; % triangular domain
+    mesh_veig=get_mesh(tri_I_intval,N_veig);
+    
+    [A_cr,B_cr]=create_cr_AB(mesh_veig);
+    [A_cr_dc,B_cr_dc]=add_dc_cr(A_cr,B_cr,false,mesh_veig);
+
+%   create mesh for approximate calculation
+    mesh_eigs=get_mesh(tri_I_intval,N_eigs);
+    [A_cg_eigs,B_cg_eigs]=create_cg_AB(mesh_eigs);
+    [A_cg_dc_with_bdry,B_cg_dc_with_bdry]=add_dc_cg(A_cg_eigs,B_cg_eigs,true,mesh_eigs);
+    [A_cg_dc_no_bdry,B_cg_dc_no_bdry]=add_dc_cg(A_cg_eigs,B_cg_eigs,false,mesh_eigs);
+    fA_dc_no_bdry=I_mid(A_cg_dc_no_bdry); fB_dc_no_bdry=I_mid(B_cg_dc_no_bdry);
+    
+%%  rigorously estimate bounds of eigenvalues
+%   lower bound for lambda1
+    cr_lambdas=I_veig(sparse(A_cr_dc),sparse(B_cr_dc),1:2);
+    l_lam1_0=cr_lambdas(1)/(1+Ch^2*cr_lambdas(1));
+    l_lam1=I_intval(I_inf(c01*l_lam1_0));
+
+%   lower bound for lambda2
+    l_lam2_0=cr_lambdas(2)/(1+Ch^2*cr_lambdas(2));
+    l_lam2=I_intval(I_inf(c01*l_lam2_0));
+
+%%  calculate a L2-normalized approximate eigenfunction
+    [v,~]=eigs(sparse(fA_dc_no_bdry),sparse(fB_dc_no_bdry),1,'sm');
+    x_hat_not_normal=x_recover_dc(v,mesh_eigs);
+    norm_x_hat_not_normal=x_hat_not_normal'*B_cg_dc_with_bdry*x_hat_not_normal;
+    x_hat_0=x_hat_not_normal/norm_x_hat_not_normal; % normalize
+
+%%  calculate approximate derivative
+    xx_0=u_x2(x_hat_0,mesh_eigs); xy_0=u_xu_y(x_hat_0,mesh_eigs); yy_0=u_y2(x_hat_0,mesh_eigs);
+    F_I0 = -2/tan(I0)*yy_0+2*xy_0;
+
+    a = (cos(I)-cos(I0))/sin(sin(I0));
+    b = sin(I)/sin(I0);
+    ep1 = -2*a^2*b^(-1)/tan(I)-2*a;
+    ep2 = 4*a*b^(-1)/tan(I);
+    ep3 = 2*b^(-1)/tan(I)-2/tan(I0);
+
+    F_Idiff = abs(ep1*xx_0+ep2*xy_0-ep3*yy_0);
+    F = hull(F_I0-F_Idiff,F_I0+F_Idiff);
+
+%%  calculate approximate eigenvalue
+    lam1h_0=I_intval((x_hat_0'*A_cg_dc_with_bdry*x_hat_0)/(x_hat_0'*B_cg_dc_with_bdry*x_hat_0));
+    lam1h=c01*lam1h_0;
+
+
+%%  calculate error
+    u_lam1=I_intval(I_sup(lam1h));
+    l_lam1h=I_intval(I_inf(lam1h));
+    rho=l_lam2;
+    
+    xx=b*xx_0; xy=-a*xx_0+xy_0; yy=a^2*b^(-1)*xx_0-2*a*b^(-1)*xy+b^(-1)*yy_0;
+    eta = sqrt(u_lam1+l_lam1h-2*u_lam1*sqrt((rho-l_lam1h)/(rho-lam1)))
+
+%     lam1_sup=I_intval(I_inf(sin(I0)^2/sin(I1)^2*l_lam1_0));
+%     rho = I_intval(I_inf(rho));
+%     
+%     xx=b*xx_0; xy=-a*xx_0+xy_0; yy=a^2*b^(-1)*xx_0-2*a*b^(-1)*xy+b^(-1)*yy_0;
+%     eta = sqrt(lam1_sup+h_lam10-2*lam1_sup*sqrt((rho-h_lam10)/(rho-lam1_sup)))
+%     Err = 2*((sqrt(h_lam1_0)+sqrt(yy))/tan(I)+sqrt(h_lam1_0+xx))*eta
+%     F = hull(F-Err,F+Err);
+    
+    
+%%  I_intval to double
+    F_inf=I_inf(F); F_sup=I_sup(F); Err=I_sup(Err); 
+
+
+end
